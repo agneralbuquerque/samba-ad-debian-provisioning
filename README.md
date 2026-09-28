@@ -8,8 +8,10 @@ Cockpit (com módulos de gerenciamento de shares) e firewalld.
 
 - [collect-info.sh](collect-info.sh) — roda no servidor de **origem** (Ubuntu) para
   levantar a configuração atual (rede, smb.conf, kerberos, firewalld, permissões).
-- [config.env.example](config.env.example) — modelo de variáveis para o **novo** cliente/servidor.
-  Copie para `config.env` e ajuste (hostname, IP, domínio, DC, compartilhamentos).
+- [configure-wizard.sh](configure-wizard.sh) — assistente interativo que faz perguntas,
+  explica cada campo com exemplos válidos/inválidos, valida a resposta e gera o `config.env`.
+- [config.env.example](config.env.example) — modelo de variáveis para o **novo** cliente/servidor,
+  caso prefira editar manualmente em vez de usar o wizard.
 - [install-debian13.sh](install-debian13.sh) — script principal de instalação/provisionamento
   do Debian 13, lê o `config.env`.
 - [docs/relatorio-origem-meudominio.md](docs/relatorio-origem-meudominio.md) — resumo da configuração
@@ -21,10 +23,18 @@ Cockpit (com módulos de gerenciamento de shares) e firewalld.
 # 1. No servidor de origem (opcional, se quiser levantar de novo config de outro host)
 ./collect-info.sh > relatorio-$(hostname).txt
 
-# 2. No novo servidor Debian 13
-cp config.env.example config.env
-nano config.env          # ajuste hostname, IP, domínio, DC, grupos/shares do cliente
+# 2. No novo servidor Debian 13 — gerar o config.env de forma guiada
+./configure-wizard.sh
+cat config.env   # revise antes de aplicar
 
+sudo ./install-debian13.sh
+```
+
+Se preferir editar manualmente em vez do wizard:
+
+```bash
+cp config.env.example config.env
+nano config.env
 sudo ./install-debian13.sh
 ```
 
