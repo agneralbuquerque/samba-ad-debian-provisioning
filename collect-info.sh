@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Coleta informações de configuração do servidor Ubuntu 22.04 (samba/AD, cockpit, firewalld)
-# Uso: rodar como root no servidor de origem (ex: arquivos.ccpassos.local)
+# Uso: rodar como root no servidor de origem (ex: arquivos.meudominio.local)
 #      ./collect-info.sh > relatorio-$(hostname).txt
 set -uo pipefail
 
@@ -68,7 +68,7 @@ lsblk
 cat /etc/fstab
 
 sep "PERMISSOES E ACLs DAS PASTAS COMPARTILHADAS (ajuste os paths conforme seu servidor)"
-for d in /work0 /work0/dados /work0/MEDIA /work0/SUPORTE_CCPASSOS; do
+for d in /work0 /work0/dados /work0/MEDIA /work0/SUPORTE; do
   [ -d "$d" ] && { echo "--- $d ---"; ls -ld "$d"; getfacl "$d" 2>/dev/null; }
 done
 

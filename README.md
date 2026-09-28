@@ -12,8 +12,8 @@ Cockpit (com módulos de gerenciamento de shares) e firewalld.
   Copie para `config.env` e ajuste (hostname, IP, domínio, DC, compartilhamentos).
 - [install-debian13.sh](install-debian13.sh) — script principal de instalação/provisionamento
   do Debian 13, lê o `config.env`.
-- [docs/relatorio-origem-ccpassos.md](docs/relatorio-origem-ccpassos.md) — resumo da configuração
-  de referência coletada no cliente CCPASSOS (sem segredos).
+- [docs/relatorio-origem-meudominio.md](docs/relatorio-origem-meudominio.md) — resumo da configuração
+  de referência coletada no cliente MEUDOMINIO (sem segredos).
 
 ## Uso
 
