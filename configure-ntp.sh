@@ -81,6 +81,7 @@ fi
 
 log "4) Habilitar e reiniciar chrony"
 systemctl enable --now chrony
+RESTART_TS="$(date '+%Y-%m-%d %H:%M:%S')"
 systemctl restart chrony
 
 log "5) Firewall (libera serviço ntp/123-udp)"
@@ -134,7 +135,7 @@ if [[ "$IS_AD_DC" == "true" ]]; then
     FAIL=1
   fi
 
-  if journalctl -u chrony --no-pager -n 50 2>/dev/null | grep -q "Wrong owner"; then
+  if journalctl -u chrony --no-pager --since "$RESTART_TS" 2>/dev/null | grep -q "Wrong owner"; then
     echo "[FALHA] chrony ainda reclamou de 'Wrong owner' no log mais recente — reinicie o chrony após a correção."
     FAIL=1
   else
