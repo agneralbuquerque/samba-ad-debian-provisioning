@@ -145,6 +145,10 @@ systemctl enable --now samba-ad-dc
 systemctl enable --now cockpit.socket firewalld chrony
 
 # ---------------------------------------------------------------------------
+log "6b) NTP (chrony com servidores ntp.br + assinatura NTP do Samba)"
+"$SCRIPT_DIR/configure-ntp.sh" "${STATIC_IP%.*}.0/24" || echo "Aviso: configure-ntp.sh falhou, configure o NTP manualmente depois."
+
+# ---------------------------------------------------------------------------
 log "7) Grupos do domínio (samba-tool group add)"
 # O DC serve apenas sysvol/netlogon (padrão do samba-tool domain provision).
 # Compartilhamentos de arquivos ficam no servidor membro separado (install-debian13.sh).
