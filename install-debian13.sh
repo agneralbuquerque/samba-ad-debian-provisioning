@@ -279,6 +279,12 @@ if [[ "${INSTALL_ZABBIX:-false}" == "true" && -n "${ZABBIX_SERVER_IP:-}" ]]; the
   firewall-cmd --reload
 fi
 
+# ---------------------------------------------------------------------------
+if [[ "${INSTALL_DATASAFER:-false}" == "true" ]]; then
+  log "14) DataSafer (backup)"
+  "$SCRIPT_DIR/install-datasafer.sh" || echo "Aviso: install-datasafer.sh terminou com erro, rode manualmente depois."
+fi
+
 log "Concluído. Próximos passos manuais:"
 echo "  - Criar/validar grupos de segurança no AD (samba-tool group ... no DC) para cada 'group' do SHARE_MAP"
 echo "  - Testar: wbinfo -u | head, wbinfo -g | head, id <usuario_do_dominio>"

@@ -177,6 +177,12 @@ done
 firewall-cmd --reload
 firewall-cmd --list-all
 
+# ---------------------------------------------------------------------------
+if [[ "${INSTALL_DATASAFER:-false}" == "true" ]]; then
+  log "9) DataSafer (backup)"
+  "$SCRIPT_DIR/install-datasafer.sh" || echo "Aviso: install-datasafer.sh terminou com erro, rode manualmente depois."
+fi
+
 log "Concluído. Próximos passos manuais:"
 echo "  - Testar DNS interno: host -t SRV _ldap._tcp.${REALM_LOWER}"
 echo "  - Testar Kerberos: kinit administrator@${DOMAIN_REALM} && klist"
