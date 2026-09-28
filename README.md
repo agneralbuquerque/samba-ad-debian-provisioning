@@ -4,20 +4,32 @@ Scripts para replicar, em servidores Debian 13, a configuração de file server 
 originalmente em Ubuntu 22.04: ingresso em domínio Active Directory via Samba/Winbind,
 Cockpit (com módulos de gerenciamento de shares) e firewalld.
 
+Existem **dois modos** de uso, conforme o cliente já tenha ou não um Domain Controller:
+
+- **Servidor membro** ([install-debian13.sh](install-debian13.sh)): o cliente já tem um AD
+  (Windows Server ou outro Samba) e este Debian só entra no domínio como file server.
+- **Domain Controller** ([install-debian13-dc.sh](install-debian13-dc.sh)): o cliente NÃO tem
+  AD nenhum ainda, e este Debian vai *ser* o Domain Controller (Samba AD DC) do zero.
+
 ## Arquivos
 
 - [collect-info.sh](collect-info.sh) — roda no servidor de **origem** (Ubuntu) para
   levantar a configuração atual (rede, smb.conf, kerberos, firewalld, permissões).
 - [configure-wizard.sh](configure-wizard.sh) — assistente interativo que faz perguntas,
-  explica cada campo com exemplos válidos/inválidos, valida a resposta e gera o `config.env`.
-- [config.env.example](config.env.example) — modelo de variáveis para o **novo** cliente/servidor,
-  caso prefira editar manualmente em vez de usar o wizard.
-- [install-debian13.sh](install-debian13.sh) — script principal de instalação/provisionamento
-  do Debian 13, lê o `config.env`.
+  explica cada campo com exemplos válidos/inválidos, valida a resposta e gera o `config.env`
+  (modo servidor membro).
+- [config.env.example](config.env.example) — modelo de variáveis para servidor **membro**
+  de domínio já existente.
+- [install-debian13.sh](install-debian13.sh) — instala e ingressa este Debian num domínio
+  AD já existente, lendo `config.env`.
+- [config-dc.env.example](config-dc.env.example) — modelo de variáveis para provisionar
+  um domínio **novo** (sem DC prévio).
+- [install-debian13-dc.sh](install-debian13-dc.sh) — provisiona este Debian como Active
+  Directory Domain Controller (Samba AD DC) do zero, lendo `config-dc.env`.
 - [docs/relatorio-origem-meudominio.md](docs/relatorio-origem-meudominio.md) — resumo da configuração
   de referência coletada no cliente MEUDOMINIO (sem segredos).
 
-## Uso
+## Uso — servidor membro (domínio já existe)
 
 ```bash
 # 1. No servidor de origem (opcional, se quiser levantar de novo config de outro host)
@@ -37,6 +49,20 @@ cp config.env.example config.env
 nano config.env
 sudo ./install-debian13.sh
 ```
+
+## Uso — Domain Controller (domínio novo, sem AD prévio)
+
+```bash
+cp config-dc.env.example config-dc.env
+nano config-dc.env       # hostname, IP, DOMAIN_REALM, DOMAIN_SHORT, SHARE_MAP
+
+sudo ./install-debian13-dc.sh
+```
+
+O script instala Samba/Winbind/Kerberos/Chrony, roda `samba-tool domain provision`
+para criar o domínio do zero (Samba assume DNS + Kerberos + LDAP), cria os grupos e
+compartimentos do `SHARE_MAP` via `samba-tool group add` + `smb.conf`, e libera o
+firewalld com os serviços necessários (`dns kerberos ldap samba samba-dc ...`).
 
 O script instala Samba/Winbind/Kerberos, gera `/etc/samba/smb.conf` a partir do `SHARE_MAP`,
 ingressa no domínio (`net ads join`), cria as pastas com dono/grupo/permissões (setgid 2770/2775/2750),
