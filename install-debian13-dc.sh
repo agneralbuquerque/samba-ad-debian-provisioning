@@ -56,9 +56,11 @@ if [[ -f /etc/network/interfaces ]] && grep -q "${INTERFACE}" /etc/network/inter
   printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
 fi
 
+ip link show "$INTERFACE" >/dev/null 2>&1 || { echo "Erro: interface '$INTERFACE' não existe. Confira com 'ip a s' e ajuste INTERFACE em config-dc.env." >&2; exit 1; }
+
 CON_NAME="$(nmcli -t -f DEVICE,CONNECTION device status | awk -F: -v d="$INTERFACE" '$1==d{print $2}')"
 if [[ -z "$CON_NAME" || "$CON_NAME" == "--" ]]; then
-  nmcli con add type ethernet ifname "$INTERFACE" con-name "$INTERFACE" >/dev/null
+  nmcli con add type ethernet ifname "$INTERFACE" con-name "$INTERFACE"
   CON_NAME="$INTERFACE"
 fi
 
@@ -69,7 +71,7 @@ nmcli con mod "$CON_NAME" \
   ipv4.method manual \
   connection.autoconnect yes
 
-nmcli con up "$CON_NAME" || echo "Aviso: falha ao subir a conexão '$CON_NAME', revise com 'nmcli con show'"
+nmcli con up "$CON_NAME" ifname "$INTERFACE" || echo "Aviso: falha ao subir a conexão '$CON_NAME', revise com 'nmcli con show'"
 
 # ---------------------------------------------------------------------------
 log "3) /etc/hosts"
@@ -93,7 +95,6 @@ else
   PROVISION_ARGS=(
     domain provision
     --use-rfc2307
-    --interactive=no
     --realm="${DOMAIN_REALM}"
     --domain="${DOMAIN_SHORT}"
     --server-role=dc
@@ -113,7 +114,7 @@ cp -f /var/lib/samba/private/krb5.conf /etc/krb5.conf
 # ---------------------------------------------------------------------------
 log "5b) Trocar o DNS para si mesmo agora que o domínio foi provisionado"
 nmcli con mod "$CON_NAME" ipv4.dns "127.0.0.1"
-nmcli con up "$CON_NAME" || true
+nmcli con up "$CON_NAME" ifname "$INTERFACE" || true
 chattr -i /etc/resolv.conf 2>/dev/null || true
 cat > /etc/resolv.conf <<EOF
 domain ${REALM_LOWER}
