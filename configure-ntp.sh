@@ -72,7 +72,8 @@ IS_AD_DC=false
 if [[ "$IS_AD_DC" == "true" ]]; then
   log "3) Permissões do socket de assinatura NTP do Samba (_chrony)"
   mkdir -p /var/lib/samba/ntp_signd
-  chgrp _chrony /var/lib/samba/ntp_signd 2>/dev/null || echo "Aviso: grupo _chrony não encontrado, confira se o pacote chrony criou o usuário/grupo."
+  # O chrony exige que o diretório seja DONO (owner), não só grupo, do usuário _chrony
+  chown _chrony:_chrony /var/lib/samba/ntp_signd 2>/dev/null || echo "Aviso: usuário/grupo _chrony não encontrado, confira se o pacote chrony criou o usuário/grupo."
   chmod 750 /var/lib/samba/ntp_signd
 else
   log "3) Servidor não é AD DC, pulando integração de assinatura NTP do Samba."
@@ -88,10 +89,63 @@ if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewa
   firewall-cmd --reload
 fi
 
-log "6) Status"
-sleep 2
-chronyc sources -v
-chronyc tracking
+# ---------------------------------------------------------------------------
+log "6) Validação automática"
+FAIL=0
+
+echo "Aguardando o chrony sincronizar (até 30s)..."
+SYNCED=false
+for i in $(seq 1 6); do
+  sleep 5
+  if chronyc tracking 2>/dev/null | grep -q "Leap status.*Normal" && \
+     ! chronyc tracking 2>/dev/null | grep -q "Reference ID.*7F7F0101"; then
+    SYNCED=true
+    break
+  fi
+done
 
 echo
-echo "Concluído. Para validar depois de alguns minutos: chronyc sources -v (colunas S deve virar '*' ou '+')"
+chronyc sources -v
+echo
+chronyc tracking
+
+if [[ "$SYNCED" == "true" ]]; then
+  echo -e "\n[OK] Cliente NTP sincronizado com uma fonte externa (ntp.br)."
+else
+  echo -e "\n[FALHA] Chrony não sincronizou com nenhuma fonte externa em 30s. Verifique DNS/firewall de saída (porta 123/udp)."
+  FAIL=1
+fi
+
+if command -v timedatectl >/dev/null 2>&1; then
+  if timedatectl status 2>/dev/null | grep -qi "synchronized: yes"; then
+    echo "[OK] timedatectl confirma: System clock synchronized: yes"
+  else
+    echo "[FALHA] timedatectl não confirma sincronismo."
+    FAIL=1
+  fi
+fi
+
+if [[ "$IS_AD_DC" == "true" ]]; then
+  OWNER="$(stat -c '%U:%G %a' /var/lib/samba/ntp_signd 2>/dev/null || echo '?')"
+  if [[ "$OWNER" == "_chrony:_chrony 750" ]]; then
+    echo "[OK] Diretório de assinatura NTP (/var/lib/samba/ntp_signd) com dono/permissão corretos ($OWNER)."
+  else
+    echo "[FALHA] /var/lib/samba/ntp_signd com dono/permissão inesperados ($OWNER, esperado _chrony:_chrony 750)."
+    FAIL=1
+  fi
+
+  if journalctl -u chrony --no-pager -n 50 2>/dev/null | grep -q "Wrong owner"; then
+    echo "[FALHA] chrony ainda reclamou de 'Wrong owner' no log mais recente — reinicie o chrony após a correção."
+    FAIL=1
+  else
+    echo "[OK] Sem erros de 'Wrong owner' no log recente do chrony."
+  fi
+fi
+
+echo
+if [[ "$FAIL" -eq 0 ]]; then
+  echo "==> NTP configurado e validado com sucesso."
+else
+  echo "==> NTP configurado, mas com pendências acima. Revise antes de considerar concluído."
+  exit 1
+fi
