@@ -253,7 +253,9 @@ log "10) Diretórios, grupos e permissões dos compartilhamentos"
 
 # ---------------------------------------------------------------------------
 log "11) Serviços"
-systemctl enable --now smbd nmbd winbind cockpit.socket firewalld
+systemctl enable smbd nmbd winbind cockpit.socket firewalld
+# restart (nao só enable --now) para garantir que servicos ja rodando releiam o smb.conf novo
+systemctl restart smbd nmbd winbind cockpit.socket firewalld
 
 # ---------------------------------------------------------------------------
 log "12) Firewalld"
