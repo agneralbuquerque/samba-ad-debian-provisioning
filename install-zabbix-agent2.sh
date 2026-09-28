@@ -38,6 +38,10 @@ fi
 log "2) Instalar zabbix-agent2"
 apt-get install -y zabbix-agent2
 
+log "2b) Plugins do zabbix-agent2 (mongodb/mssql/postgresql)"
+apt-get install -y zabbix-agent2-plugin-mongodb zabbix-agent2-plugin-mssql zabbix-agent2-plugin-postgresql || \
+  echo "Aviso: algum plugin não instalou, confira se está disponível pro Debian 13."
+
 log "3) Configurar zabbix_agent2.conf"
 cp -a /etc/zabbix/zabbix_agent2.conf "/etc/zabbix/zabbix_agent2.conf.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
 sed -i \
