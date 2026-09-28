@@ -47,42 +47,29 @@ log "1) Hostname"
 hostnamectl set-hostname "$NEW_HOSTNAME"
 
 # ---------------------------------------------------------------------------
-log "2) Rede (/etc/network/interfaces) — DNS aponta para si mesmo (o Samba será o DNS do domínio)"
-command -v ifup >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y ifupdown; }
+log "2) Rede (NetworkManager / nmcli) — DNS externo durante a instalação, troca para si mesmo depois do provision"
+command -v nmcli >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y network-manager; }
+systemctl enable --now NetworkManager
 
-CIDR="${STATIC_IP##*/}"
-NETMASK="$(python3 -c "import ipaddress;print(ipaddress.IPv4Network((0,${CIDR})).netmask)" 2>/dev/null || echo "255.255.255.0")"
-
-cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
-cat > /etc/network/interfaces <<EOF
-source /etc/network/interfaces.d/*
-
-auto lo
-iface lo inet loopback
-
-auto ${INTERFACE}
-iface ${INTERFACE} inet static
-    address ${IP_ADDR}
-    netmask ${NETMASK}
-    gateway ${GATEWAY}
-    dns-nameservers 127.0.0.1
-EOF
-
-if command -v ifup >/dev/null 2>&1; then
-  ifdown "${INTERFACE}" 2>/dev/null || true
-  ifup "${INTERFACE}" || echo "Aviso: 'ifup ${INTERFACE}' falhou, revise a interface em config-dc.env"
+if [[ -f /etc/network/interfaces ]] && grep -q "${INTERFACE}" /etc/network/interfaces; then
+  cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%Y%m%d_%H%M%S)"
+  printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
 fi
 
-# Evita NetworkManager/dhcpcd sobrescrevendo o resolv.conf ou disputando a interface
-systemctl disable --now NetworkManager 2>/dev/null || true
-apt-get purge -y network-manager 2>/dev/null || true
+CON_NAME="$(nmcli -t -f DEVICE,CONNECTION device status | awk -F: -v d="$INTERFACE" '$1==d{print $2}')"
+if [[ -z "$CON_NAME" || "$CON_NAME" == "--" ]]; then
+  nmcli con add type ethernet ifname "$INTERFACE" con-name "$INTERFACE" >/dev/null
+  CON_NAME="$INTERFACE"
+fi
 
-chattr -i /etc/resolv.conf 2>/dev/null || true
-cat > /etc/resolv.conf <<EOF
-domain ${REALM_LOWER}
-search ${REALM_LOWER}
-nameserver 127.0.0.1
-EOF
+nmcli con mod "$CON_NAME" \
+  ipv4.addresses "$STATIC_IP" \
+  ipv4.gateway "$GATEWAY" \
+  ipv4.dns "${DNS_FORWARDER:-8.8.8.8}" \
+  ipv4.method manual \
+  connection.autoconnect yes
+
+nmcli con up "$CON_NAME" || echo "Aviso: falha ao subir a conexão '$CON_NAME', revise com 'nmcli con show'"
 
 # ---------------------------------------------------------------------------
 log "3) /etc/hosts"
@@ -93,7 +80,7 @@ log "4) Pacotes (samba AD DC, kerberos, chrony, cockpit, firewalld, acl)"
 apt-get update
 apt-get install -y \
   samba samba-dsdb-modules samba-vfs-modules smbclient krb5-user winbind libnss-winbind acl \
-  chrony cockpit cockpit-storaged cockpit-packagekit firewalld
+  chrony cockpit cockpit-storaged cockpit-networkmanager cockpit-packagekit firewalld
 
 # ---------------------------------------------------------------------------
 log "5) Provisionamento do domínio (samba-tool domain provision)"
@@ -122,6 +109,17 @@ else
 fi
 
 cp -f /var/lib/samba/private/krb5.conf /etc/krb5.conf
+
+# ---------------------------------------------------------------------------
+log "5b) Trocar o DNS para si mesmo agora que o domínio foi provisionado"
+nmcli con mod "$CON_NAME" ipv4.dns "127.0.0.1"
+nmcli con up "$CON_NAME" || true
+chattr -i /etc/resolv.conf 2>/dev/null || true
+cat > /etc/resolv.conf <<EOF
+domain ${REALM_LOWER}
+search ${REALM_LOWER}
+nameserver 127.0.0.1
+EOF
 
 # ---------------------------------------------------------------------------
 log "6) Serviços — desabilita smbd/nmbd/winbind separados (o binário 'samba' cobre tudo no AD DC)"

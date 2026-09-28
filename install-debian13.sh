@@ -45,35 +45,31 @@ log "1) Hostname"
 hostnamectl set-hostname "$NEW_HOSTNAME"
 
 # ---------------------------------------------------------------------------
-log "2) Rede (/etc/network/interfaces)"
+log "2) Rede (NetworkManager / nmcli)"
 if [[ -n "${STATIC_IP:-}" && -n "${INTERFACE:-}" ]]; then
-  command -v ifup >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y ifupdown; }
+  command -v nmcli >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y network-manager; }
+  systemctl enable --now NetworkManager
 
-  IP_ADDR="${STATIC_IP%%/*}"
-  CIDR="${STATIC_IP##*/}"
-  NETMASK="$(python3 -c "import ipaddress;print(ipaddress.IPv4Network((0,${CIDR})).netmask)" 2>/dev/null || echo "255.255.255.0")"
-
-  cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
-  cat > /etc/network/interfaces <<EOF
-source /etc/network/interfaces.d/*
-
-auto lo
-iface lo inet loopback
-
-auto ${INTERFACE}
-iface ${INTERFACE} inet static
-    address ${IP_ADDR}
-    netmask ${NETMASK}
-    gateway ${GATEWAY}
-    dns-nameservers ${DNS_PRIMARY} ${DNS_SECONDARY}
-EOF
-
-  if command -v ifup >/dev/null 2>&1; then
-    ifdown "${INTERFACE}" 2>/dev/null || true
-    ifup "${INTERFACE}" || echo "Aviso: 'ifup ${INTERFACE}' falhou, revise a interface em config.env"
-  else
-    echo "Aviso: ifupdown não encontrado. Instale 'ifupdown' ou ajuste a rede manualmente."
+  # Garante que o ifupdown não dispute a interface com o NetworkManager
+  if [[ -f /etc/network/interfaces ]] && grep -q "${INTERFACE}" /etc/network/interfaces; then
+    cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%Y%m%d_%H%M%S)"
+    printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
   fi
+
+  CON_NAME="$(nmcli -t -f DEVICE,CONNECTION device status | awk -F: -v d="$INTERFACE" '$1==d{print $2}')"
+  if [[ -z "$CON_NAME" || "$CON_NAME" == "--" ]]; then
+    nmcli con add type ethernet ifname "$INTERFACE" con-name "$INTERFACE" >/dev/null
+    CON_NAME="$INTERFACE"
+  fi
+
+  nmcli con mod "$CON_NAME" \
+    ipv4.addresses "$STATIC_IP" \
+    ipv4.gateway "$GATEWAY" \
+    ipv4.dns "$DNS_PRIMARY $DNS_SECONDARY" \
+    ipv4.method manual \
+    connection.autoconnect yes
+
+  nmcli con up "$CON_NAME" || echo "Aviso: falha ao subir a conexão '$CON_NAME', revise com 'nmcli con show'"
 else
   echo "STATIC_IP/INTERFACE não definidos, pulando configuração de rede."
 fi
@@ -94,7 +90,7 @@ log "4) Pacotes (samba, winbind, kerberos, cockpit, firewalld, acl)"
 apt update
 apt install -y \
   samba winbind libnss-winbind libpam-winbind krb5-user smbclient acl \
-  cockpit cockpit-storaged cockpit-packagekit \
+  cockpit cockpit-storaged cockpit-networkmanager cockpit-packagekit \
   firewalld
 
 # ---------------------------------------------------------------------------
