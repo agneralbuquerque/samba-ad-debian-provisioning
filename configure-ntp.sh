@@ -4,8 +4,11 @@
 # tempo dos membros do domínio.
 #
 # Uso:
-#   sudo ./configure-ntp.sh                 # usa os padrões (ntp.br + rede 192.168.0.0/24)
-#   sudo ./configure-ntp.sh <subnet_lan>    # ex: ./configure-ntp.sh 192.168.0.0/24
+#   sudo ./configure-ntp.sh                              # usa os padrões (ntp.br + rede 192.168.0.0/24)
+#   sudo ./configure-ntp.sh <subnet_lan>                 # ex: ./configure-ntp.sh 192.168.0.0/24
+#   sudo ./configure-ntp.sh <subnet_lan> <dc_ntp_server>  # membro do domínio: sincroniza preferencialmente
+#                                                          # com o DC (ex: dc01.ferreiragomes.lan), com
+#                                                          # fallback para o ntp.br se o DC ficar indisponível
 #
 # Referência dos servidores oficiais do NIC.br (ntp.br):
 #   a.st1.ntp.br, b.st1.ntp.br, c.st1.ntp.br, d.st1.ntp.br  (stratum 1, GPS)
@@ -20,6 +23,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 LAN_SUBNET="${1:-192.168.0.0/24}"
+DC_NTP_SERVER="${2:-}"
 
 NTP_SERVERS=(
   a.st1.ntp.br
@@ -46,7 +50,12 @@ IS_AD_DC=false
 [[ -d /var/lib/samba/private/sam.ldb.d ]] && IS_AD_DC=true
 
 {
-  echo "# Gerado por configure-ntp.sh — servidores oficiais do NIC.br (ntp.br)"
+  if [[ -n "$DC_NTP_SERVER" ]]; then
+    echo "# Gerado por configure-ntp.sh — servidor do domínio como fonte preferencial, ntp.br como fallback"
+    echo "server ${DC_NTP_SERVER} iburst prefer"
+  else
+    echo "# Gerado por configure-ntp.sh — servidores oficiais do NIC.br (ntp.br)"
+  fi
   for s in "${NTP_SERVERS[@]}"; do
     echo "server ${s} iburst"
   done
