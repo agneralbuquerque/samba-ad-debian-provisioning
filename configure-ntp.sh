@@ -73,7 +73,6 @@ IS_AD_DC=false
   echo
   if [[ "$IS_AD_DC" == "true" ]]; then
     echo "# Assinatura NTP exigida pelo Samba AD DC para clientes do domínio"
-    echo "bindcmdaddress /var/lib/samba/ntp_signd/socket"
     echo "ntpsigndsocket /var/lib/samba/ntp_signd"
   fi
 } > /etc/chrony/chrony.conf
@@ -81,8 +80,9 @@ IS_AD_DC=false
 if [[ "$IS_AD_DC" == "true" ]]; then
   log "3) Permissões do socket de assinatura NTP do Samba (_chrony)"
   mkdir -p /var/lib/samba/ntp_signd
-  # O chrony exige que o diretório seja DONO (owner), não só grupo, do usuário _chrony
-  chown _chrony:_chrony /var/lib/samba/ntp_signd 2>/dev/null || echo "Aviso: usuário/grupo _chrony não encontrado, confira se o pacote chrony criou o usuário/grupo."
+  # O samba (rodando como root) precisa poder escrever o pipe nesse diretório;
+  # o chrony só precisa conseguir LER via grupo _chrony. Dono deve ser root.
+  chown root:_chrony /var/lib/samba/ntp_signd 2>/dev/null || echo "Aviso: grupo _chrony não encontrado, confira se o pacote chrony criou o usuário/grupo."
   chmod 750 /var/lib/samba/ntp_signd
 else
   log "3) Servidor não é AD DC, pulando integração de assinatura NTP do Samba."
@@ -137,10 +137,10 @@ fi
 
 if [[ "$IS_AD_DC" == "true" ]]; then
   OWNER="$(stat -c '%U:%G %a' /var/lib/samba/ntp_signd 2>/dev/null || echo '?')"
-  if [[ "$OWNER" == "_chrony:_chrony 750" ]]; then
+  if [[ "$OWNER" == "root:_chrony 750" ]]; then
     echo "[OK] Diretório de assinatura NTP (/var/lib/samba/ntp_signd) com dono/permissão corretos ($OWNER)."
   else
-    echo "[FALHA] /var/lib/samba/ntp_signd com dono/permissão inesperados ($OWNER, esperado _chrony:_chrony 750)."
+    echo "[FALHA] /var/lib/samba/ntp_signd com dono/permissão inesperados ($OWNER, esperado root:_chrony 750)."
     FAIL=1
   fi
 
