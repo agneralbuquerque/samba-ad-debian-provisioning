@@ -49,7 +49,15 @@ hostnamectl set-hostname "$NEW_HOSTNAME"
 # ---------------------------------------------------------------------------
 log "2) Rede (NetworkManager / nmcli) — DNS externo durante a instalação, troca para si mesmo depois do provision"
 command -v nmcli >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y network-manager; }
+
+# O pacote network-manager, ao instalar com a interface já listada no ifupdown,
+# grava uma trava permanente marcando-a como "unmanaged". Remove essa trava.
+if [[ -f /etc/NetworkManager/conf.d/10-globally-managed-devices.conf ]]; then
+  rm -f /etc/NetworkManager/conf.d/10-globally-managed-devices.conf
+fi
+
 systemctl enable --now NetworkManager
+systemctl restart NetworkManager
 
 if [[ -f /etc/network/interfaces ]] && grep -q "${INTERFACE}" /etc/network/interfaces; then
   cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%Y%m%d_%H%M%S)"
@@ -193,7 +201,7 @@ done
 # VFS recycle bin nativo
 if ! grep -q "recycle:repository" /etc/samba/smb.conf; then
   sed -i "/^\[global\]/a \\
-        vfs objects = acl_xattr recycle\\
+        vfs objects = dfs_samba4 acl_xattr recycle\\
         map acl inherit = yes\\
         recycle:repository = ${SAMBA_RECYCLE_PATH:-$DATA_MOUNT/lixeira}/%U\\
         recycle:keeptree = yes\\

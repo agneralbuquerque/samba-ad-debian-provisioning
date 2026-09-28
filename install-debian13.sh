@@ -48,7 +48,15 @@ hostnamectl set-hostname "$NEW_HOSTNAME"
 log "2) Rede (NetworkManager / nmcli)"
 if [[ -n "${STATIC_IP:-}" && -n "${INTERFACE:-}" ]]; then
   command -v nmcli >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y network-manager; }
+
+  # O pacote network-manager, ao instalar com a interface já listada no ifupdown,
+  # grava uma trava permanente marcando-a como "unmanaged". Remove essa trava.
+  if [[ -f /etc/NetworkManager/conf.d/10-globally-managed-devices.conf ]]; then
+    rm -f /etc/NetworkManager/conf.d/10-globally-managed-devices.conf
+  fi
+
   systemctl enable --now NetworkManager
+  systemctl restart NetworkManager
 
   # Garante que o ifupdown não dispute a interface com o NetworkManager
   if [[ -f /etc/network/interfaces ]] && grep -q "${INTERFACE}" /etc/network/interfaces; then
