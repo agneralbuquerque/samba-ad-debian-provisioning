@@ -94,14 +94,6 @@ apt install -y \
   cockpit cockpit-storaged cockpit-networkmanager cockpit-packagekit \
   firewalld
 
-if [[ "${INSTALL_COCKPIT_EXTRAS:-false}" == "true" ]]; then
-  # cockpit-navigator / cockpit-file-sharing / cockpit-identities vêm do repositório 45drives
-  curl -fsSL https://repo.45drives.com/setup | bash
-  apt update
-  apt install -y cockpit-navigator cockpit-file-sharing cockpit-identities || \
-    echo "Aviso: pacotes 45drives podem ainda não ter build para trixie; verifique manualmente."
-fi
-
 # ---------------------------------------------------------------------------
 log "5) nsswitch.conf"
 sed -i 's/^passwd:.*/passwd:         files systemd winbind/' /etc/nsswitch.conf
@@ -195,8 +187,6 @@ cp -a /etc/samba/smb.conf "/etc/samba/smb.conf.bak.$(date +%Y%m%d_%H%M%S)" 2>/de
 
         socket options = TCP_NODELAY IPTOS_LOWDELAY
         use sendfile = yes
-
-        include = registry
 EOF
 
   for entry in "${SHARE_MAP[@]}"; do

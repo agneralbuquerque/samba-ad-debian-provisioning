@@ -30,7 +30,8 @@ sudo ./install-debian13.sh
 
 O script instala Samba/Winbind/Kerberos, gera `/etc/samba/smb.conf` a partir do `SHARE_MAP`,
 ingressa no domínio (`net ads join`), cria as pastas com dono/grupo/permissões (setgid 2770/2775/2750),
-instala e habilita o Cockpit, e libera os serviços necessários no firewalld.
+instala e habilita o Cockpit (pacotes oficiais do Debian, sem repositório 45drives), e libera os
+serviços necessários no firewalld.
 
 ## Pós-instalação (manual)
 
@@ -44,3 +45,5 @@ instala e habilita o Cockpit, e libera os serviços necessários no firewalld.
 - `config.env` fica fora do controle de versão (`.gitignore`) por conter dados específicos do cliente.
 - No Debian 13 o firewalld usa nftables por padrão; só migre para o backend iptables se houver
   instabilidade (visto pontualmente em um dos ambientes Ubuntu de origem).
+- O repositório 45drives (cockpit-navigator/cockpit-file-sharing/cockpit-identities) não é usado no
+  Debian 13; os shares são gerenciados só via `smb.conf`.
