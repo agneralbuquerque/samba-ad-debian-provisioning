@@ -45,31 +45,34 @@ log "1) Hostname"
 hostnamectl set-hostname "$NEW_HOSTNAME"
 
 # ---------------------------------------------------------------------------
-log "2) Rede (netplan)"
+log "2) Rede (/etc/network/interfaces)"
 if [[ -n "${STATIC_IP:-}" && -n "${INTERFACE:-}" ]]; then
-  install -d /etc/netplan
-  cat > /etc/netplan/01-static.yaml <<EOF
-network:
-  version: 2
-  ethernets:
-    ${INTERFACE}:
-      dhcp4: false
-      addresses:
-        - ${STATIC_IP}
-      routes:
-        - to: default
-          via: ${GATEWAY}
-      nameservers:
-        addresses:
-          - ${DNS_PRIMARY}
-          - ${DNS_SECONDARY}
+  command -v ifup >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y ifupdown; }
+
+  IP_ADDR="${STATIC_IP%%/*}"
+  CIDR="${STATIC_IP##*/}"
+  NETMASK="$(python3 -c "import ipaddress;print(ipaddress.IPv4Network((0,${CIDR})).netmask)" 2>/dev/null || echo "255.255.255.0")"
+
+  cp -a /etc/network/interfaces "/etc/network/interfaces.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+  cat > /etc/network/interfaces <<EOF
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+auto ${INTERFACE}
+iface ${INTERFACE} inet static
+    address ${IP_ADDR}
+    netmask ${NETMASK}
+    gateway ${GATEWAY}
+    dns-nameservers ${DNS_PRIMARY} ${DNS_SECONDARY}
 EOF
-  chmod 600 /etc/netplan/01-static.yaml
-  if command -v netplan >/dev/null 2>&1; then
-    netplan apply || echo "Aviso: 'netplan apply' falhou, revise a interface em config.env"
+
+  if command -v ifup >/dev/null 2>&1; then
+    ifdown "${INTERFACE}" 2>/dev/null || true
+    ifup "${INTERFACE}" || echo "Aviso: 'ifup ${INTERFACE}' falhou, revise a interface em config.env"
   else
-    echo "Aviso: netplan não encontrado (Debian usa systemd-networkd/NetworkManager por padrão)."
-    echo "       Ajuste manualmente a rede se 'netplan.io' não estiver instalado."
+    echo "Aviso: ifupdown não encontrado. Instale 'ifupdown' ou ajuste a rede manualmente."
   fi
 else
   echo "STATIC_IP/INTERFACE não definidos, pulando configuração de rede."
