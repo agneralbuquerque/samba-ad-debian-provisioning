@@ -49,6 +49,9 @@ log "2) Rede (NetworkManager / nmcli)"
 if [[ -n "${STATIC_IP:-}" && -n "${INTERFACE:-}" ]]; then
   command -v nmcli >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y network-manager; }
 
+  # dhcpcd disputa a interface com o NetworkManager e sobrescreve o /etc/resolv.conf
+  apt-get purge -y dhcpcd5 dhcpcd-base 2>/dev/null || true
+
   # O pacote network-manager, ao instalar com a interface já listada no ifupdown,
   # grava uma trava permanente marcando-a como "unmanaged". Remove essa trava.
   if [[ -f /etc/NetworkManager/conf.d/10-globally-managed-devices.conf ]]; then
@@ -64,11 +67,15 @@ if [[ -n "${STATIC_IP:-}" && -n "${INTERFACE:-}" ]]; then
     printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
   fi
 
-  CON_NAME="$(nmcli -t -f DEVICE,CONNECTION device status | awk -F: -v d="$INTERFACE" '$1==d{print $2}')"
-  if [[ -z "$CON_NAME" || "$CON_NAME" == "--" ]]; then
-    nmcli con add type ethernet ifname "$INTERFACE" con-name "$INTERFACE" >/dev/null
-    CON_NAME="$INTERFACE"
-  fi
+  ip link show "$INTERFACE" >/dev/null 2>&1 || { echo "Erro: interface '$INTERFACE' não existe. Confira com 'ip a s' e ajuste INTERFACE em config.env." >&2; exit 1; }
+
+  # Remove qualquer conexão duplicada/pré-existente para essa interface
+  while read -r uuid; do
+    [[ -n "$uuid" ]] && nmcli con delete uuid "$uuid" 2>/dev/null || true
+  done < <(nmcli -t -f NAME,UUID,DEVICE con show | awk -F: -v d="$INTERFACE" '$1==d || $3==d{print $2}')
+
+  CON_NAME="${INTERFACE}-static"
+  nmcli con add type ethernet ifname "$INTERFACE" con-name "$CON_NAME"
 
   nmcli con mod "$CON_NAME" \
     ipv4.addresses "$STATIC_IP" \
@@ -77,7 +84,7 @@ if [[ -n "${STATIC_IP:-}" && -n "${INTERFACE:-}" ]]; then
     ipv4.method manual \
     connection.autoconnect yes
 
-  nmcli con up "$CON_NAME" || echo "Aviso: falha ao subir a conexão '$CON_NAME', revise com 'nmcli con show'"
+  nmcli con up "$CON_NAME" ifname "$INTERFACE" || echo "Aviso: falha ao subir a conexão '$CON_NAME', revise com 'nmcli con show'"
 else
   echo "STATIC_IP/INTERFACE não definidos, pulando configuração de rede."
 fi

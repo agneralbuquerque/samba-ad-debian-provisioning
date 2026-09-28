@@ -50,6 +50,9 @@ hostnamectl set-hostname "$NEW_HOSTNAME"
 log "2) Rede (NetworkManager / nmcli) — DNS externo durante a instalação, troca para si mesmo depois do provision"
 command -v nmcli >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y network-manager; }
 
+# dhcpcd disputa a interface com o NetworkManager e sobrescreve o /etc/resolv.conf
+apt-get purge -y dhcpcd5 dhcpcd-base 2>/dev/null || true
+
 # O pacote network-manager, ao instalar com a interface já listada no ifupdown,
 # grava uma trava permanente marcando-a como "unmanaged". Remove essa trava.
 if [[ -f /etc/NetworkManager/conf.d/10-globally-managed-devices.conf ]]; then
@@ -66,11 +69,14 @@ fi
 
 ip link show "$INTERFACE" >/dev/null 2>&1 || { echo "Erro: interface '$INTERFACE' não existe. Confira com 'ip a s' e ajuste INTERFACE em config-dc.env." >&2; exit 1; }
 
-CON_NAME="$(nmcli -t -f DEVICE,CONNECTION device status | awk -F: -v d="$INTERFACE" '$1==d{print $2}')"
-if [[ -z "$CON_NAME" || "$CON_NAME" == "--" ]]; then
-  nmcli con add type ethernet ifname "$INTERFACE" con-name "$INTERFACE"
-  CON_NAME="$INTERFACE"
-fi
+# Remove qualquer conexão duplicada/pré-existente para essa interface (evita
+# conflito de IPs quando o script roda mais de uma vez ou após tentativas manuais)
+while read -r uuid; do
+  [[ -n "$uuid" ]] && nmcli con delete uuid "$uuid" 2>/dev/null || true
+done < <(nmcli -t -f NAME,UUID,DEVICE con show | awk -F: -v d="$INTERFACE" '$1==d || $3==d{print $2}')
+
+CON_NAME="${INTERFACE}-static"
+nmcli con add type ethernet ifname "$INTERFACE" con-name "$CON_NAME"
 
 nmcli con mod "$CON_NAME" \
   ipv4.addresses "$STATIC_IP" \
@@ -139,97 +145,28 @@ systemctl enable --now samba-ad-dc
 systemctl enable --now cockpit.socket firewalld chrony
 
 # ---------------------------------------------------------------------------
-log "7) Disco de dados (opcional)"
-if [[ -n "${DATA_DISK:-}" ]]; then
-  if ! blkid "${DATA_DISK}1" >/dev/null 2>&1; then
-    echo "Particionando ${DATA_DISK} ..."
-    parted -s "$DATA_DISK" mklabel gpt mkpart primary ext4 0% 100%
-    mkfs.ext4 -F "${DATA_DISK}1"
-  fi
-  mkdir -p "$DATA_MOUNT"
-  UUID="$(blkid -s UUID -o value "${DATA_DISK}1")"
-  grep -q "$UUID" /etc/fstab || echo "UUID=${UUID} ${DATA_MOUNT} ext4 defaults 0 2" >> /etc/fstab
-  mount -a
-else
-  mkdir -p "$DATA_MOUNT"
-  echo "DATA_DISK não definido, usando $DATA_MOUNT no disco raiz."
-fi
+log "7) Grupos do domínio (samba-tool group add)"
+# O DC serve apenas sysvol/netlogon (padrão do samba-tool domain provision).
+# Compartilhamentos de arquivos ficam no servidor membro separado (install-debian13.sh).
+for group in "${GROUP_MAP[@]:-}"; do
+  [[ -z "$group" ]] && continue
+  samba-tool group show "$group" >/dev/null 2>&1 || samba-tool group add "$group"
+done
 
-# ---------------------------------------------------------------------------
-log "8) Grupos do domínio (samba-tool group add) e compartilhamentos (smb.conf)"
-for entry in "${SHARE_MAP[@]}"; do
+# Compatibilidade: se SHARE_MAP ainda tiver entradas de uma config antiga, cria os grupos também
+for entry in "${SHARE_MAP[@]:-}"; do
+  [[ -z "$entry" ]] && continue
   IFS=':' read -r name path group mode comment <<< "$entry"
   if [[ -n "$group" ]]; then
     samba-tool group show "$group" >/dev/null 2>&1 || samba-tool group add "$group"
   fi
 done
 
-{
-  echo
-  echo "#============================ Compartilhamentos =============================="
-  for entry in "${SHARE_MAP[@]}"; do
-    IFS=':' read -r name path group mode comment <<< "$entry"
-    echo
-    echo "[${name}]"
-    echo "        comment = ${comment}"
-    echo "        path = ${path}"
-    echo "        read only = no"
-    case "$mode" in
-      publico)
-        echo "        guest ok = no"
-        echo "        valid users = \"@domain users\""
-        echo "        create mask = 0664"
-        echo "        directory mask = 0775"
-        ;;
-      restrito)
-        echo "        browseable = no"
-        echo "        valid users = @${group}"
-        echo "        force group = ${group}"
-        echo "        create mask = 0640"
-        echo "        directory mask = 0750"
-        ;;
-      rw|*)
-        echo "        valid users = @${group}"
-        echo "        force group = ${group}"
-        echo "        create mask = 0660"
-        echo "        directory mask = 0770"
-        ;;
-    esac
-  done
-} >> /etc/samba/smb.conf
-
-# VFS recycle bin nativo
-if ! grep -q "recycle:repository" /etc/samba/smb.conf; then
-  sed -i "/^\[global\]/a \\
-        vfs objects = dfs_samba4 acl_xattr recycle\\
-        map acl inherit = yes\\
-        recycle:repository = ${SAMBA_RECYCLE_PATH:-$DATA_MOUNT/lixeira}/%U\\
-        recycle:keeptree = yes\\
-        recycle:touch = yes\\
-        recycle:versions = yes" /etc/samba/smb.conf
-fi
-
 testparm -s /etc/samba/smb.conf
 systemctl restart samba-ad-dc
 
 # ---------------------------------------------------------------------------
-log "9) Diretórios e permissões"
-for entry in "${SHARE_MAP[@]}"; do
-  IFS=':' read -r name path group mode comment <<< "$entry"
-  mkdir -p "$path"
-  if [[ -n "$group" ]]; then
-    chown -R "administrator:${group}" "$path" 2>/dev/null || echo "Aviso: grupo '${group}' ainda não resolvido via NSS, rode 'chown' manualmente após reiniciar."
-  fi
-  case "$mode" in
-    publico) chmod -R 2775 "$path" ;;
-    restrito) chmod -R 2750 "$path" ;;
-    rw|*) chmod -R 2770 "$path" ;;
-  esac
-done
-mkdir -p "${SAMBA_RECYCLE_PATH:-$DATA_MOUNT/lixeira}"
-
-# ---------------------------------------------------------------------------
-log "10) Firewalld"
+log "8) Firewalld"
 for svc in $FIREWALL_SERVICES; do
   firewall-cmd --permanent --add-service="$svc" 2>/dev/null || echo "Aviso: serviço '$svc' não existe no firewalld, pulei."
 done
