@@ -95,6 +95,7 @@ grep -qF "$NEW_HOSTNAME" /etc/hosts || echo "${IP_ADDR}  ${NEW_HOSTNAME} ${NEW_H
 log "4) Pacotes (samba AD DC, kerberos, chrony, cockpit, firewalld, acl)"
 apt-get update
 apt-get install -y \
+  curl \
   samba samba-dsdb-modules samba-vfs-modules smbclient krb5-user winbind libnss-winbind acl \
   chrony cockpit cockpit-storaged cockpit-networkmanager cockpit-packagekit firewalld
 

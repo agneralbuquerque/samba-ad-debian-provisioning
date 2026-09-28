@@ -27,6 +27,7 @@ fi
 log() { echo -e "\n==> $*"; }
 
 log "1) Repositório oficial do Zabbix 7.0 para Debian 13"
+command -v curl >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y curl; }
 if ! dpkg -l zabbix-release >/dev/null 2>&1; then
   TMP_DEB="$(mktemp --suffix=.deb)"
   curl -fsSL "$ZABBIX_REPO_URL" -o "$TMP_DEB"

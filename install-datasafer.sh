@@ -18,6 +18,7 @@ fi
 log() { echo -e "\n==> $*"; }
 
 log "1) Baixar o pacote do DataSafer"
+command -v curl >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y curl; }
 mkdir -p "$DATASAFER_DIR"
 curl -fsSL "$DATASAFER_URL" -o "$DATASAFER_DIR/pro-nix.tar.gz"
 
