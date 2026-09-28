@@ -94,7 +94,7 @@ log "4) Pacotes (samba, winbind, kerberos, cockpit, firewalld, acl)"
 apt update
 apt install -y \
   samba winbind libnss-winbind libpam-winbind krb5-user smbclient acl \
-  cockpit cockpit-storaged cockpit-networkmanager cockpit-packagekit \
+  cockpit cockpit-storaged cockpit-packagekit \
   firewalld
 
 # ---------------------------------------------------------------------------
