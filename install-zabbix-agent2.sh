@@ -4,8 +4,9 @@
 # scripts principais, se INSTALL_ZABBIX=true no config.env/config-dc.env).
 #
 # Uso:
-#   sudo ./install-zabbix-agent2.sh <zabbix_server_ip> [hostname_no_zabbix]
-#   ou definindo variáveis de ambiente: ZABBIX_SERVER_IP=192.168.0.254 ZABBIX_HOSTNAME=arquivos ./install-zabbix-agent2.sh
+#   sudo ./install-zabbix-agent2.sh                                  # pergunta Server/ServerActive/Hostname interativamente
+#   sudo ./install-zabbix-agent2.sh <zabbix_server_ip> [hostname]     # não pergunta, usa os valores informados
+#   ou definindo variáveis de ambiente: ZABBIX_SERVER_IP=192.168.0.1 ZABBIX_HOSTNAME=arquivos ./install-zabbix-agent2.sh
 
 set -euo pipefail
 
@@ -15,14 +16,9 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 ZABBIX_SERVER_IP="${1:-${ZABBIX_SERVER_IP:-}}"
-ZABBIX_HOSTNAME="${2:-${ZABBIX_HOSTNAME:-$(hostname)}}"
+ZABBIX_HOSTNAME="${2:-${ZABBIX_HOSTNAME:-}}"
 ZABBIX_REPO_DEB="zabbix-release_latest_7.0+debian13_all.deb"
 ZABBIX_REPO_URL="https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/${ZABBIX_REPO_DEB}"
-
-if [[ -z "$ZABBIX_SERVER_IP" ]]; then
-  echo "Uso: sudo ./install-zabbix-agent2.sh <zabbix_server_ip> [hostname_no_zabbix]" >&2
-  exit 1
-fi
 
 log() { echo -e "\n==> $*"; }
 
@@ -43,13 +39,35 @@ log "2b) Plugins do zabbix-agent2 (mongodb/mssql/postgresql)"
 apt-get install -y zabbix-agent2-plugin-mongodb zabbix-agent2-plugin-mssql zabbix-agent2-plugin-postgresql || \
   echo "Aviso: algum plugin não instalou, confira se está disponível pro Debian 13."
 
+# ---------------------------------------------------------------------------
 log "3) Configurar zabbix_agent2.conf"
+
+CUR_SERVER="$(grep -E '^Server=' /etc/zabbix/zabbix_agent2.conf | head -n1 | cut -d= -f2-)"
+CUR_HOSTNAME="$(grep -E '^Hostname=' /etc/zabbix/zabbix_agent2.conf | head -n1 | cut -d= -f2-)"
+
+if [[ -z "$ZABBIX_SERVER_IP" ]]; then
+  read -rp "Server / ServerActive (IP do Zabbix Server/Proxy) [${CUR_SERVER}]: " ans
+  ZABBIX_SERVER_IP="${ans:-$CUR_SERVER}"
+fi
+if [[ -z "$ZABBIX_HOSTNAME" ]]; then
+  read -rp "Hostname (nome deste host cadastrado no Zabbix) [${CUR_HOSTNAME:-$(hostname)}]: " ans
+  ZABBIX_HOSTNAME="${ans:-${CUR_HOSTNAME:-$(hostname)}}"
+fi
+
+if [[ -z "$ZABBIX_SERVER_IP" ]]; then
+  echo "Erro: Server/ServerActive não pode ficar vazio." >&2
+  exit 1
+fi
+
 cp -a /etc/zabbix/zabbix_agent2.conf "/etc/zabbix/zabbix_agent2.conf.bak.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
 sed -i \
   -e "s/^Server=.*/Server=${ZABBIX_SERVER_IP}/" \
   -e "s/^ServerActive=.*/ServerActive=${ZABBIX_SERVER_IP}/" \
   -e "s/^Hostname=.*/Hostname=${ZABBIX_HOSTNAME}/" \
   /etc/zabbix/zabbix_agent2.conf
+
+echo "Config aplicada:"
+grep -vE '^\s*(#|$)' /etc/zabbix/zabbix_agent2.conf
 
 log "4) Habilitar e (re)iniciar o serviço"
 systemctl enable zabbix-agent2
