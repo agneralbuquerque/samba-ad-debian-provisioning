@@ -178,8 +178,14 @@ firewall-cmd --reload
 firewall-cmd --list-all
 
 # ---------------------------------------------------------------------------
+if [[ "${INSTALL_ZABBIX:-false}" == "true" && -n "${ZABBIX_SERVER_IP:-}" ]]; then
+  log "9) Zabbix agent2"
+  "$SCRIPT_DIR/install-zabbix-agent2.sh" "$ZABBIX_SERVER_IP" "${ZABBIX_HOSTNAME:-$NEW_HOSTNAME}" || echo "Aviso: install-zabbix-agent2.sh terminou com erro, rode manualmente depois."
+fi
+
+# ---------------------------------------------------------------------------
 if [[ "${INSTALL_DATASAFER:-false}" == "true" ]]; then
-  log "9) DataSafer (backup)"
+  log "10) DataSafer (backup)"
   "$SCRIPT_DIR/install-datasafer.sh" || echo "Aviso: install-datasafer.sh terminou com erro, rode manualmente depois."
 fi
 

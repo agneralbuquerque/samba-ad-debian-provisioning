@@ -268,15 +268,7 @@ firewall-cmd --list-all
 # ---------------------------------------------------------------------------
 if [[ "${INSTALL_ZABBIX:-false}" == "true" && -n "${ZABBIX_SERVER_IP:-}" ]]; then
   log "13) Zabbix agent2"
-  apt install -y zabbix-agent2
-  sed -i \
-    -e "s/^Server=.*/Server=${ZABBIX_SERVER_IP}/" \
-    -e "s/^ServerActive=.*/ServerActive=${ZABBIX_SERVER_IP}/" \
-    -e "s/^Hostname=.*/Hostname=${ZABBIX_HOSTNAME:-$NEW_HOSTNAME}/" \
-    /etc/zabbix/zabbix_agent2.conf
-  systemctl enable --now zabbix-agent2
-  firewall-cmd --permanent --add-port=10050/tcp
-  firewall-cmd --reload
+  "$SCRIPT_DIR/install-zabbix-agent2.sh" "$ZABBIX_SERVER_IP" "${ZABBIX_HOSTNAME:-$NEW_HOSTNAME}" || echo "Aviso: install-zabbix-agent2.sh terminou com erro, rode manualmente depois."
 fi
 
 # ---------------------------------------------------------------------------
