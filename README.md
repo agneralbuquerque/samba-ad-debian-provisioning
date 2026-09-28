@@ -18,6 +18,11 @@ Existem **dois modos** de uso, conforme o cliente já tenha ou não um Domain Co
 - [configure-wizard.sh](configure-wizard.sh) — assistente interativo que faz perguntas,
   explica cada campo com exemplos válidos/inválidos, valida a resposta e gera o `config.env`
   (modo servidor membro).
+- [manage-shares.sh](manage-shares.sh) — cria/corrige diretório, dono, grupo e permissão de
+  cada share do `SHARE_MAP`. Roda dentro do `install-debian13.sh`, mas também pode (e deve)
+  ser rodado sozinho no dia a dia sempre que adicionar um share novo ou precisar corrigir
+  permissão, sem repetir a instalação inteira: `./manage-shares.sh` (todos) ou
+  `./manage-shares.sh NOTAS RCPN` (só alguns).
 - [config.env.example](config.env.example) — modelo de variáveis para servidor **membro**
   de domínio já existente.
 - [install-debian13.sh](install-debian13.sh) — instala e ingressa este Debian num domínio

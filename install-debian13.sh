@@ -246,20 +246,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-log "10) Diretórios, grupos e permissões"
-for entry in "${SHARE_MAP[@]}"; do
-  IFS=':' read -r name path group mode comment <<< "$entry"
-  mkdir -p "$path"
-  if [[ -n "$group" ]]; then
-    chown -R "administrator:${group}" "$path"
-  fi
-  case "$mode" in
-    publico) chmod -R 2775 "$path" ;;
-    restrito) chmod -R 2750 "$path" ;;
-    rw|*) chmod -R 2770 "$path" ;;
-  esac
-done
-mkdir -p "${SAMBA_RECYCLE_PATH:-$DATA_MOUNT/lixeira}"
+log "10) Diretórios, grupos e permissões dos compartilhamentos"
+# Gerenciado por script separado (mais fácil de rodar de novo no dia a dia
+# sem repetir toda a instalação): mkdir, chown, chmod de cada share do SHARE_MAP.
+"$SCRIPT_DIR/manage-shares.sh" || echo "Aviso: manage-shares.sh terminou com pendências, revise acima."
 
 # ---------------------------------------------------------------------------
 log "11) Serviços"
